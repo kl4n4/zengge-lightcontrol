@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,6 +10,8 @@ import (
 	"github.com/vikstrous/zengge-lightcontrol/manage"
 	"github.com/vikstrous/zengge-lightcontrol/remote"
 )
+
+var colorErr = errors.New("please provide a color name or hex color")
 
 func addAll(parent *cobra.Command, children []cobra.Command) {
 	for _, child := range children {
@@ -199,13 +202,40 @@ func main() {
 			return nil
 		},
 	}
-
+	var speed *int
+	var transition *string
 	execCmds := []cobra.Command{
 		{
+			Use:   "set-seq",
+			Short: "Set a color sequence",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				colors := make([]control.Color, 0, 4)
+				if len(args) < 1 {
+					colors = append(colors, control.Color{R: 255}, control.Color{R: 255, G: 255, B: 255}, control.Color{B: 255})
+				} else {
+					for _, arg := range args {
+						c := control.ParseColorString(arg)
+						if c == nil {
+							return colorErr
+						}
+						colors = append(colors, *c)
+					}
+				}
+				transition, err := control.ParseTransition(*transition)
+				if err != nil {
+					return err
+				}
+				return controller.SetCustomSequence(uint8(*speed), transition, colors)
+			},
+		},
+	}
+	speed = execCmds[0].Flags().Int("sp", 5, "Speed between color changes (1-32)")
+	transition = execCmds[0].Flags().String("t", "Jumping", "Transition between colors: Gradual, Jumping, Strobe")
+	execCmds = append(execCmds, []cobra.Command{
+		cobra.Command{
 			Use:   "set-color",
 			Short: "change the color of the lightbulb",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				colorErr := fmt.Errorf("please provide a color name or hex color")
 				if len(args) < 1 {
 					return colorErr
 				}
@@ -296,8 +326,7 @@ func main() {
 				}
 				return controller.AtmolightDaemon(args[0])
 			},
-		},
-	}
+		}}...)
 
 	zenggeCmd.AddCommand(localCmd)
 	zenggeCmd.AddCommand(manageCmd)

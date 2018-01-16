@@ -1,6 +1,10 @@
 package control
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 type Color struct {
 	R    uint8
@@ -19,30 +23,52 @@ type State struct {
 	Color         Color
 }
 
+type Transition uint8
+
 const (
-	ModeColor    = 97
-	ModeMusic    = 98
-	ModeCustom   = 35
-	ModePreset1  = 37
-	ModePreset2  = 38
-	ModePreset3  = 39
-	ModePreset4  = 40
-	ModePreset5  = 41
-	ModePreset6  = 42
-	ModePreset7  = 43
-	ModePreset8  = 44
-	ModePreset9  = 45
-	ModePreset10 = 46
-	ModePreset11 = 47
-	ModePreset12 = 48
-	ModePreset13 = 49
-	ModePreset14 = 50
-	ModePreset15 = 51
-	ModePreset16 = 52
-	ModePreset17 = 53
-	ModePreset18 = 54
-	ModePreset19 = 55
-	ModePreset20 = 56
+	Gradual Transition = 0x3a
+	Jumping Transition = 0x3b
+	Strobe  Transition = 0x3c
+)
+
+func ParseTransition(s string) (Transition, error) {
+	switch strings.ToLower(s) {
+	case "gradual":
+		return Gradual, nil
+	case "jumping":
+		return Jumping, nil
+	case "strobe":
+		return Strobe, nil
+	default:
+		return Gradual, fmt.Errorf("Invalid Transition '%s', expecing Gradual, Jumping or Strobe", s)
+	}
+}
+
+const (
+	ModeColor      = 97
+	ModeMusic      = 98
+	ModeCustom     = 35
+	ModePreset1    = 37
+	ModePreset2    = 38
+	ModePreset3    = 39
+	ModePreset4    = 40
+	ModePreset5    = 41
+	ModePreset6    = 42
+	ModePreset7    = 43
+	ModePreset8    = 44
+	ModePreset9    = 45
+	ModePreset10   = 46
+	ModePreset11   = 47
+	ModePreset12   = 48
+	ModePreset13   = 49
+	ModePreset14   = 50
+	ModePreset15   = 51
+	ModePreset16   = 52
+	ModePreset17   = 53
+	ModePreset18   = 54
+	ModePreset19   = 55
+	ModePreset20   = 56
+	ModeCustomFunc = 96
 )
 
 func ModeName(mode uint8) string {
@@ -93,8 +119,10 @@ func ModeName(mode uint8) string {
 		return "Preset19"
 	case ModePreset20:
 		return "Preset20"
+	case ModeCustomFunc:
+		return "CustomFunc"
 	default:
-		return "Unknown"
+		return fmt.Sprintf("Unknown (%d)", mode)
 	}
 }
 
@@ -236,6 +264,7 @@ const (
 	CommandGetTimers3    = uint8(0x2B)
 	CommandSetColor      = uint8(0x31)
 	CommandSetMusicColor = uint8(0x41)
+	CommandSetCustomFunc = uint8(0x51)
 	CommandSetMode       = uint8(0x61)
 	CommandSetPower      = uint8(0x71)
 	CommandGetState      = uint8(0x81)
@@ -275,6 +304,33 @@ func FormatSetMode(mode, speed uint8) []byte {
 	// TODO
 	return nil
 }
+
+func FormatCustomSequence(speed uint8, t Transition, colors []Color) []byte {
+	// speed is 0x01 - 0x20 (fastest -slowest)
+	if speed == 0 {
+		speed = 1
+	} else if speed > 0x020 {
+		speed = 0x020
+	}
+	buff := make([]byte, 1, 70)
+	buff[0] = CommandSetCustomFunc
+	// have to send 16 colors, the magic color 01 02 03 00 is ignored and indicated the end of the sequence
+	// we pad out the remaining colors with that sequece
+	ignoreColor := Color{1, 2, 3, 0, false}
+	for len(colors) < 16 {
+		colors = append(colors, ignoreColor)
+	}
+	for _, color := range colors {
+		// uses different encoding to set Color
+		// although we send W it seems to be ignored
+		buff = append(buff, color.R, color.G, color.B, color.W)
+	}
+	buff = append(buff, speed)
+	buff = append(buff, uint8(t))
+	buff = append(buff, 0xff)
+	return buff
+}
+
 func ParseState(data []byte) State {
 	state := State{}
 	// data[0] is always 0x81

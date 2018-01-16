@@ -44,6 +44,11 @@ func (c *Controller) SetColor(color Color) error {
 	return err
 }
 
+func (c *Controller) SetCustomSequence(speed uint8, t Transition, colors []Color) error {
+	_, err := c.SendBytes(FormatCustomSequence(speed, t, colors), 1)
+	return err
+}
+
 func (c *Controller) GetState() (*State, error) {
 	data := []byte{CommandGetState, CommandGetState2, CommandGetState3}
 	sum := Checksum(data)
